@@ -1,7 +1,7 @@
 name: astrbot_plugin_meme_grabber
 author: Yangyuwuhan
 description: 将QQ表情包转化为可供保存的文件，支持多种格式
-version: 2.0.0
+version: 2.1.0
 repo: https://github.com/Yangyuwuhan/astrbot_plugin_meme_grabber
 platforms:
   - aiocqhttp
@@ -9,3 +9,4 @@ commands:
   - name: 转换
     description: 转换图片为可保存的文件格式
     usage: 发送图片或回复包含图片的消息，然后输入 /转换 指令
+
