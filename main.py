@@ -19,7 +19,7 @@ import astrbot.api.message_components as Comp
 
 
 @register(
-    "表情包提取",
+    "表情包抓取",
     "Yangyuwuhan",
     "把QQ表情包提取为可保存的文件",
     "2.0.0",
@@ -117,13 +117,13 @@ class MemeGrabberPlugin(Star):
             # 调用 QQ 协议获取图片
             response = await client.api.call_action("get_image", file_id=picture_id)
             localdiskpath = response["file"]
-            abs_path = os.path.abspath(localdiskpath)
+            temp_abs_path = os.path.abspath(localdiskpath)
 
             # 只通过filetype库判断文件格式
             file_extension = f".{self.default_extension}"  # 默认扩展名
 
             try:
-                kind = filetype.guess(abs_path)
+                kind = filetype.guess(temp_abs_path)
                 if kind and kind.extension:
                     file_extension = f".{kind.extension}"
             except Exception as e:
@@ -134,7 +134,19 @@ class MemeGrabberPlugin(Star):
             unique_id = uuid.uuid4().hex[:8]
             filename = f"图片_{timestamp}_{unique_id}{file_extension}"
 
-            logger.info(f"处理图片: {abs_path}, 扩展名: {file_extension}")
+            # 复制图片到我们的临时目录
+            import shutil
+
+            temp_path = os.path.join(self.data_dir, filename)
+
+            try:
+                shutil.copy2(localdiskpath, temp_path)
+                abs_path = os.path.abspath(temp_path)
+                logger.info(f"图片已复制到临时目录: {abs_path}")
+            except Exception as e:
+                logger.error(f"复制图片到临时目录失败: {str(e)}")
+                abs_path = temp_abs_path
+
             async for result in self.send_file_to_user(event, abs_path, filename):
                 yield result
         except Exception as e:
@@ -204,13 +216,13 @@ class MemeGrabberPlugin(Star):
                             "get_image", file_id=file_id
                         )
                         localdiskpath = response["file"]
-                        abs_path = os.path.abspath(localdiskpath)
+                        temp_abs_path = os.path.abspath(localdiskpath)
 
                         # 只通过filetype库判断文件格式
-                        file_extension = ".jpg"  # 默认扩展名
+                        file_extension = f".{self.default_extension}"  # 默认扩展名
 
                         try:
-                            kind = filetype.guess(abs_path)
+                            kind = filetype.guess(temp_abs_path)
                             if kind and kind.extension:
                                 file_extension = f".{kind.extension}"
                         except Exception as e:
@@ -220,6 +232,19 @@ class MemeGrabberPlugin(Star):
                         timestamp = int(time.time() * 1000)
                         unique_id = uuid.uuid4().hex[:8]
                         filename = f"图片_{timestamp}_{unique_id}{file_extension}"
+
+                        # 复制图片到我们的临时目录
+                        import shutil
+
+                        temp_path = os.path.join(self.data_dir, filename)
+
+                        try:
+                            shutil.copy2(localdiskpath, temp_path)
+                            abs_path = os.path.abspath(temp_path)
+                            logger.info(f"图片已复制到临时目录: {abs_path}")
+                        except Exception as e:
+                            logger.error(f"复制图片到临时目录失败: {str(e)}")
+                            abs_path = temp_abs_path
 
                         async for result in self.send_file_to_user(
                             event, abs_path, filename
@@ -271,13 +296,17 @@ class MemeGrabberPlugin(Star):
 
     async def terminate(self):
         """插件终止时的清理操作"""
-        # 清理可能遗留的临时图片文件
-        try:
-            if os.path.exists(self.data_dir):
-                for file in os.listdir(self.data_dir):
-                    file_path = os.path.join(self.data_dir, file)
-                    if os.path.isfile(file_path):
-                        os.remove(file_path)
-                        logger.info(f"清理临时文件: {file_path}")
-        except Exception as e:
-            logger.error(f"清理临时文件时发生错误: {str(e)}")
+        # 只有当开启了清理临时文件时才执行清理操作
+        if self.delete_after_send:
+            # 清理可能遗留的临时图片文件
+            try:
+                if os.path.exists(self.data_dir):
+                    for file in os.listdir(self.data_dir):
+                        file_path = os.path.join(self.data_dir, file)
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            logger.info(f"清理临时文件: {file_path}")
+            except Exception as e:
+                logger.error(f"清理临时文件时发生错误: {str(e)}")
+        else:
+            logger.info("未开启清理临时文件，跳过清理操作")
