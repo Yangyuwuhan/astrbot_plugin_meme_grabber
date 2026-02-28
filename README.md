@@ -13,7 +13,7 @@
 
 ## 安装方法
 
-1. 下载zip文件并解压，将插件目录 `astrbot_plugin_meme_grabber` 复制到 AstrBot 的 `data/plugins` 目录下
+1. 下载最新的 Releases 文件并解压，将插件目录 `astrbot_plugin_meme_grabber` 复制到 AstrBot 的 `data/plugins` 目录下
 2. 重启 AstrBot 或在插件管理页面中手动加载插件
 
 ## 使用说明
@@ -58,5 +58,6 @@ AGPL License
 - [astrbot_plugins_ConvetPicture](https://github.com/orchidsziyou/astrbot_plugins_ConvetPicture)
 - [astrbot_plugin_meme_grabber](https://github.com/Yangyuwuhan/astrbot_plugin_meme_grabber)
 - [AstrBot](https://astrbot.app)
+
 
 
