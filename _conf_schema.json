@@ -19,6 +19,8 @@
     "download_timeout": {
         "description": "表情包下载超时时间（秒）",
         "type": "int",
-        "default": 10
+        "default": 60
     }
 }
+
+
