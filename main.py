@@ -348,11 +348,11 @@ class MemeGrabberPlugin(Star):
             event.stop_event()
             event.should_call_llm(False)
 
-    @filter.command("转换")
+    @filter.command("提取")
     async def convert_command(self, event: AstrMessageEvent):
-        """转换图片为可保存的文件格式
+        """提取图片为可保存的文件格式
 
-        用法: 发送图片或回复包含图片的消息，然后输入 /转换 指令
+        用法: 发送图片或回复包含图片的消息，然后输入 /提取 指令
         """
         event.should_call_llm(False)
         message_chain = event.get_messages()
