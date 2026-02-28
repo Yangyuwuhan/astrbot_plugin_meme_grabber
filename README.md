@@ -18,32 +18,41 @@
 
 ## 使用说明
 
-引用表情包并使用指令`/转换`
+引用表情包并使用指令 `/转换`
 
 ## 配置选项
 
 插件支持以下配置选项，可在插件管理页面中修改：
 
-| 配置项 | 描述 | 默认值 |
-|--------|------|--------|
-| temp_dir | 临时文件保存目录 | data/plugin_data/astrbot_plugin_meme_grabber |
-| delete_after_send | 发送后删除临时文件 | true |
-| default_extension | 默认图片扩展名 | jpg |
-| download_timeout | 图片下载超时时间（秒） | 10 |
+| 配置项            | 描述                   | 默认值                                       |
+| ----------------- | ---------------------- | -------------------------------------------- |
+| temp_dir          | 临时文件保存目录       | data/plugin_data/astrbot_plugin_meme_grabber |
+| delete_after_send | 发送后删除临时文件     | true                                         |
+| default_extension | 默认图片扩展名         | jpg                                          |
+| download_timeout  | 图片下载超时时间（秒） | 10                                           |
 
 ## 注意事项
 
-1. 该插件仅支持 QQ 平台（aiocqhttp）
-2. 插件会自动创建临时文件保存目录（如果不存在）
+该插件仅支持 QQ 平台（aiocqhttp）
 
 ## 许可证
 
 AGPL License
 
-## 作者
+## 声明
 
-Yangyuwuhan
+本插件的最初构想来源于 [orchidsziyou](https://github.com/orchidsziyou) 的 [astrbot_plugins_ConvetPicture](https://github.com/orchidsziyou/astrbot_plugins_ConvetPicture) 插件，Yangyuwuhan 将整个插件进行了重构。
 
-## 仓库地址
+## 改动
 
-https://github.com/Yangyuwuhan/astrbot_plugin_meme_grabber
+与 [astrbot_plugins_ConvetPicture](https://github.com/orchidsziyou/astrbot_plugins_ConvetPicture) 相比，本插件做了如下改动:
+
+1. 优化代码逻辑
+2. 新增了可能用到的配置文件
+3. 修复了输出的文件名不正确的问题
+
+## 相关链接
+
+- [astrbot_plugins_ConvetPicture](https://github.com/orchidsziyou/astrbot_plugins_ConvetPicture)
+- [astrbot_plugin_meme_grabber](https://github.com/Yangyuwuhan/astrbot_plugin_meme_grabber)
+- [AstrBot](https://astrbot.app)
