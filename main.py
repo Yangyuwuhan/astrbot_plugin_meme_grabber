@@ -31,6 +31,8 @@ class MemeGrabberPlugin(Star):
         self.config = config
         # 获取插件数据目录（使用框架规范方法）
         self.data_dir = self.config.get("temp_dir", StarTools.get_data_dir(self.name))
+        # 转换为绝对路径
+        self.data_dir = os.path.abspath(self.data_dir)
         os.makedirs(self.data_dir, exist_ok=True)
         # 获取是否在发送后删除临时文件的配置
         self.delete_after_send = self.config.get("delete_after_send", True)
@@ -103,8 +105,12 @@ class MemeGrabberPlugin(Star):
             chain: list[BaseMessageComponent] = [
                 Comp.File(file=file_path, name=filename)
             ]
+            # 使用 yield 发送，保持生成器函数特性
             yield event.chain_result(chain)
-            event.stop_event()
+        except Exception as e:
+            logger.error(f"发送文件时发生错误: {str(e)}")
+            yield event.plain_result(f"发送文件失败: {str(e)}")
+        finally:
             # 根据配置决定是否删除临时文件，仅删除插件自己创建的文件
             if self.delete_after_send and is_plugin_created:
                 try:
@@ -113,9 +119,6 @@ class MemeGrabberPlugin(Star):
                         logger.info(f"删除临时文件: {file_path}")
                 except Exception as e:
                     logger.error(f"删除临时文件时发生错误: {str(e)}")
-        except Exception as e:
-            logger.error(f"发送文件时发生错误: {str(e)}")
-            yield event.plain_result(f"发送文件失败: {str(e)}")
             event.stop_event()
 
     async def _process_local_image(self, event: AstrMessageEvent, localdiskpath: str):
@@ -312,22 +315,33 @@ class MemeGrabberPlugin(Star):
             if found_images:
                 # 构建包含所有文件的消息链
                 chain: list[BaseMessageComponent] = []
+                temp_files = []
                 for file_path, filename in found_images:
                     chain.append(Comp.File(file=file_path, name=filename))
+                    # 收集临时文件路径，用于后续删除
+                    if os.path.abspath(file_path).startswith(
+                        os.path.abspath(self.data_dir)
+                    ):
+                        temp_files.append(file_path)
 
-                # 发送所有文件
-                yield event.chain_result(chain)
+                try:
+                    # 发送所有文件
+                    yield event.chain_result(chain)
+                except Exception as e:
+                    logger.error(f"发送文件时发生错误: {str(e)}")
+                    yield event.plain_result(f"发送文件失败: {str(e)}")
+                finally:
+                    # 根据配置决定是否删除临时文件
+                    if self.delete_after_send:
+                        for file_path in temp_files:
+                            try:
+                                if os.path.exists(file_path):
+                                    os.remove(file_path)
+                                    logger.info(f"删除临时文件: {file_path}")
+                            except Exception as e:
+                                logger.error(f"删除临时文件时发生错误: {str(e)}")
+
                 event.stop_event()
-
-                # 根据配置决定是否删除临时文件
-                if self.delete_after_send:
-                    for file_path, _ in found_images:
-                        try:
-                            if os.path.exists(file_path) and self.data_dir in file_path:
-                                os.remove(file_path)
-                                logger.info(f"删除临时文件: {file_path}")
-                        except Exception as e:
-                            logger.error(f"删除临时文件时发生错误: {str(e)}")
         except Exception as e:
             logger.error(f"处理回复消息时发生错误: {str(e)}")
             yield event.plain_result(f"处理回复失败: {str(e)}")
@@ -350,29 +364,108 @@ class MemeGrabberPlugin(Star):
             event.should_call_llm(False)
             return
 
+        found_images = []
+        found_reply = False
+
+        # 先收集所有图片和回复
         for msg in message_chain:
-            if msg.type == "Image":
-                # 类型检查，确保是Image类型
-                if not isinstance(msg, Image):
-                    yield event.plain_result("消息类型错误：不是有效的图片消息")
-                    event.stop_event()
-                    event.should_call_llm(False)
-                    return
-                # 处理图片消息
-                async for result in self.handle_image_message(event, msg):
-                    yield result
-                return
-            elif msg.type == "Reply":
-                # 类型检查，确保是Reply类型
-                if not isinstance(msg, Reply):
-                    yield event.plain_result("消息类型错误：不是有效的回复消息")
-                    event.stop_event()
-                    event.should_call_llm(False)
-                    return
-                # 处理回复消息
+            if msg.type == "Image" and isinstance(msg, Image):
+                found_images.append(msg)
+            elif msg.type == "Reply" and isinstance(msg, Reply):
+                found_reply = True
+                # 处理回复消息（已经支持多个图片）
                 async for result in self.handle_reply_message(event, msg):
                     yield result
+                # 回复消息处理完成后直接返回
                 return
+
+        # 处理收集到的所有图片
+        if found_images:
+            # 构建包含所有文件的消息链
+            chain: list[BaseMessageComponent] = []
+            temp_files = []
+
+            # 确保是AiocqhttpMessageEvent类型
+            if not isinstance(event, AiocqhttpMessageEvent):
+                yield event.plain_result("抱歉，该功能仅支持 QQ 平台")
+                event.stop_event()
+                event.should_call_llm(False)
+                return
+
+            client = event.bot
+
+            for img_msg in found_images:
+                # 处理单个图片
+                picture_id = img_msg.file
+
+                try:
+                    # 调用 QQ 协议获取图片
+                    response = await client.api.call_action(
+                        "get_image", file_id=picture_id
+                    )
+                    localdiskpath = response["file"]
+
+                    # 只通过filetype库判断文件格式
+                    file_extension = f".{self.default_extension}"  # 默认扩展名
+                    try:
+                        kind = filetype.guess(localdiskpath)
+                        if kind and kind.extension:
+                            file_extension = f".{kind.extension}"
+                    except Exception as e:
+                        logger.error(f"使用filetype判断图片类型失败: {str(e)}")
+
+                    # 生成唯一的文件名
+                    import datetime
+
+                    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+                    timestamp = int(time.time() * 1000)
+                    unique_id = uuid.uuid4().hex[:8]
+                    filename = (
+                        f"meme_{date_str}_{timestamp}_{unique_id}{file_extension}"
+                    )
+
+                    # 复制图片到我们的临时目录
+                    import shutil
+
+                    temp_path = os.path.join(self.data_dir, filename)
+
+                    try:
+                        shutil.copy2(localdiskpath, temp_path)
+                        abs_path = os.path.abspath(temp_path)
+                        logger.info(f"图片已复制到临时目录: {abs_path}")
+                        chain.append(Comp.File(file=abs_path, name=filename))
+                        temp_files.append(abs_path)
+                    except Exception as e:
+                        logger.error(f"复制图片到临时目录失败: {str(e)}")
+                        # 如果复制失败，使用原始路径
+                        abs_path = os.path.abspath(localdiskpath)
+                        chain.append(Comp.File(file=abs_path, name=filename))
+                except Exception as e:
+                    logger.error(f"处理图片时发生错误: {str(e)}")
+                    yield event.plain_result(f"处理图片失败: {str(e)}")
+                    event.stop_event()
+                    event.should_call_llm(False)
+                    return
+
+            try:
+                # 发送所有文件
+                yield event.chain_result(chain)
+            except Exception as e:
+                logger.error(f"发送文件时发生错误: {str(e)}")
+                yield event.plain_result(f"发送文件失败: {str(e)}")
+            finally:
+                # 根据配置决定是否删除临时文件
+                if self.delete_after_send:
+                    for file_path in temp_files:
+                        try:
+                            if os.path.exists(file_path):
+                                os.remove(file_path)
+                                logger.info(f"删除临时文件: {file_path}")
+                        except Exception as e:
+                            logger.error(f"删除临时文件时发生错误: {str(e)}")
+
+            event.stop_event()
+            return
 
         # 没有找到图片
         yield event.plain_result("请引用表情包或在对话中包含表情包")
