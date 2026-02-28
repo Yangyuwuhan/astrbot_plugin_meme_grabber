@@ -1,0 +1,26 @@
+{
+    "temp_dir": {
+        "description": "临时文件保存目录",
+        "type": "string",
+        "default": "data/plugin_data/astrbot_plugin_meme_grabber",
+        "hint": "插件保存临时文件的目录路径"
+    },
+    "delete_after_send": {
+        "description": "发送后删除临时文件",
+        "type": "bool",
+        "default": true,
+        "hint": "是否在将文件发送给用户后删除临时文件"
+    },
+    "default_extension": {
+        "description": "默认图片扩展名",
+        "type": "string",
+        "default": "jpg",
+        "hint": "当无法检测图片类型时使用的默认扩展名"
+    },
+    "download_timeout": {
+        "description": "图片下载超时时间（秒）",
+        "type": "int",
+        "default": 10,
+        "hint": "设置图片下载的超时时间"
+    }
+}
