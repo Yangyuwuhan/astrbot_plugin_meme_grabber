@@ -1,6 +1,6 @@
-name: 表情包抓取
+name: astrbot_plugin_meme_grabber
 author: Yangyuwuhan
-description: 把QQ表情包提取为可保存的文件
+description: 将QQ表情包转化为可供保存的文件，支持多种格式
 version: 2.0.0
 repo: https://github.com/Yangyuwuhan/astrbot_plugin_meme_grabber
 platforms:
