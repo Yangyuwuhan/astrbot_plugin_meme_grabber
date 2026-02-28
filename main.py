@@ -2,6 +2,8 @@ import os
 import urllib.parse
 import time
 import uuid
+import datetime
+import shutil
 
 import aiohttp
 
@@ -18,30 +20,33 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
 import astrbot.api.message_components as Comp
 
 
-@register(
-    "表情包抓取",
-    "Yangyuwuhan",
-    "把QQ表情包提取为可保存的文件",
-    "2.0.0",
-    "https://github.com/Yangyuwuhan/astrbot_plugin_meme_grabber",
-)
 class MemeGrabberPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
         # 获取插件数据目录（使用框架规范方法）
         self.data_dir = self.config.get("temp_dir", StarTools.get_data_dir(self.name))
-        # 转换为绝对路径
-        self.data_dir = os.path.abspath(self.data_dir)
+        # 转换为绝对路径，确保是字符串类型
+        self.data_dir = os.path.abspath(str(self.data_dir))
         os.makedirs(self.data_dir, exist_ok=True)
         # 获取是否在发送后删除临时文件的配置
         self.delete_after_send = self.config.get("delete_after_send", True)
         # 获取默认图片扩展名
         self.default_extension = self.config.get("default_extension", "jpg")
         # 获取图片下载超时时间
-        self.download_timeout = self.config.get("download_timeout", 10)
-        # 创建可复用的 aiohttp ClientSession
-        self.session = aiohttp.ClientSession()
+        self.download_timeout = self.config.get("download_timeout", 60)
+        # 延迟初始化 aiohttp ClientSession，首次使用时创建
+        self.session = None
+
+    async def _get_session(self):
+        """获取或创建 aiohttp ClientSession
+
+        Returns:
+            aiohttp.ClientSession: 异步HTTP会话
+        """
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession()
+        return self.session
 
     async def download_image(self, picture_url: str, relative_path: str) -> bool:
         """下载图片到本地
@@ -60,8 +65,10 @@ class MemeGrabberPlugin(Star):
                 logger.error(f"不支持的URL协议: {parsed_url.scheme}")
                 return False
 
+            # 获取或创建 ClientSession
+            session = await self._get_session()
             # 使用复用的 ClientSession 进行异步请求，设置超时时间
-            async with self.session.get(
+            async with session.get(
                 picture_url, timeout=self.download_timeout
             ) as response:
                 if response.status == 200:
@@ -75,6 +82,12 @@ class MemeGrabberPlugin(Star):
                             current_size += len(chunk)
                             if current_size > max_size:
                                 logger.error("图片文件过大，超过10MB")
+                                # 清理已下载的部分文件
+                                if os.path.exists(relative_path):
+                                    os.remove(relative_path)
+                                    logger.info(
+                                        f"已清理过大的临时文件: {relative_path}"
+                                    )
                                 return False
                             f.write(chunk)
                     return True
@@ -83,6 +96,10 @@ class MemeGrabberPlugin(Star):
                     return False
         except Exception as e:
             logger.error(f"下载图片时发生错误: {str(e)}")
+            # 清理可能的临时文件
+            if os.path.exists(relative_path):
+                os.remove(relative_path)
+                logger.info(f"已清理失败的临时文件: {relative_path}")
             return False
 
     async def send_file_to_user(
@@ -121,6 +138,20 @@ class MemeGrabberPlugin(Star):
                     logger.error(f"删除临时文件时发生错误: {str(e)}")
             event.stop_event()
 
+    def _generate_filename(self, ext: str) -> str:
+        """生成唯一的文件名
+
+        Args:
+            ext: 文件扩展名，包含点号
+
+        Returns:
+            str: 生成的文件名
+        """
+        date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        timestamp = int(time.time() * 1000)
+        unique_id = uuid.uuid4().hex[:8]
+        return f"meme_{date_str}_{timestamp}_{unique_id}{ext}"
+
     async def _process_local_image(self, event: AstrMessageEvent, localdiskpath: str):
         """处理本地图片路径，转换为可发送文件
 
@@ -144,17 +175,10 @@ class MemeGrabberPlugin(Star):
             except Exception as e:
                 logger.error(f"使用filetype判断图片类型失败: {str(e)}")
 
-            # 生成唯一的文件名，格式：meme_年-月-日_时间戳_随机ID.扩展名
-            import datetime
-
-            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-            timestamp = int(time.time() * 1000)
-            unique_id = uuid.uuid4().hex[:8]
-            filename = f"meme_{date_str}_{timestamp}_{unique_id}{file_extension}"
+            # 生成唯一的文件名
+            filename = self._generate_filename(file_extension)
 
             # 复制图片到我们的临时目录
-            import shutil
-
             temp_path = os.path.join(self.data_dir, filename)
 
             try:
@@ -176,35 +200,6 @@ class MemeGrabberPlugin(Star):
                     yield result
         except Exception as e:
             logger.error(f"处理本地图片时发生错误: {str(e)}")
-            yield event.plain_result(f"处理图片失败: {str(e)}")
-            event.stop_event()
-            event.should_call_llm(False)
-
-    async def handle_image_message(self, event: AstrMessageEvent, image_msg: Image):
-        """处理图片消息
-
-        Args:
-            event: 消息事件
-            image_msg: 图片消息
-        """
-        try:
-            if not isinstance(event, AiocqhttpMessageEvent):
-                yield event.plain_result("抱歉，该功能仅支持 QQ 平台")
-                event.stop_event()
-                event.should_call_llm(False)
-                return
-
-            client = event.bot
-            picture_id = image_msg.file
-
-            # 调用 QQ 协议获取图片
-            response = await client.api.call_action("get_image", file_id=picture_id)
-            localdiskpath = response["file"]
-
-            async for result in self._process_local_image(event, localdiskpath):
-                yield result
-        except Exception as e:
-            logger.error(f"处理图片消息时发生错误: {str(e)}")
             yield event.plain_result(f"处理图片失败: {str(e)}")
             event.stop_event()
             event.should_call_llm(False)
@@ -243,13 +238,8 @@ class MemeGrabberPlugin(Star):
                     if not ext:
                         ext = f".{self.default_extension}"  # 默认格式
 
-                    # 生成唯一的文件名和保存路径，格式：meme_年-月-日_时间戳_随机ID.扩展名
-                    import datetime
-
-                    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-                    timestamp = int(time.time() * 1000)
-                    unique_id = uuid.uuid4().hex[:8]
-                    filename = f"meme_{date_str}_{timestamp}_{unique_id}{ext}"
+                    # 生成唯一的文件名和保存路径
+                    filename = self._generate_filename(ext)
                     relative_path = os.path.join(self.data_dir, filename)
 
                     # 处理官方表情
@@ -279,15 +269,8 @@ class MemeGrabberPlugin(Star):
                         except Exception as e:
                             logger.error(f"使用filetype判断图片类型失败: {str(e)}")
 
-                        # 生成唯一的文件名，格式：meme_年-月-日_时间戳_随机ID.扩展名
-                        import datetime
-
-                        date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-                        timestamp = int(time.time() * 1000)
-                        unique_id = uuid.uuid4().hex[:8]
-                        filename = (
-                            f"meme_{date_str}_{timestamp}_{unique_id}{file_extension}"
-                        )
+                        # 生成唯一的文件名
+                        filename = self._generate_filename(file_extension)
 
                         # 复制图片到我们的临时目录
                         import shutil
@@ -415,18 +398,9 @@ class MemeGrabberPlugin(Star):
                         logger.error(f"使用filetype判断图片类型失败: {str(e)}")
 
                     # 生成唯一的文件名
-                    import datetime
-
-                    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-                    timestamp = int(time.time() * 1000)
-                    unique_id = uuid.uuid4().hex[:8]
-                    filename = (
-                        f"meme_{date_str}_{timestamp}_{unique_id}{file_extension}"
-                    )
+                    filename = self._generate_filename(file_extension)
 
                     # 复制图片到我们的临时目录
-                    import shutil
-
                     temp_path = os.path.join(self.data_dir, filename)
 
                     try:
@@ -475,11 +449,12 @@ class MemeGrabberPlugin(Star):
     async def terminate(self):
         """插件终止时的清理操作"""
         # 关闭 aiohttp ClientSession
-        try:
-            await self.session.close()
-            logger.info("已关闭 aiohttp ClientSession")
-        except Exception as e:
-            logger.error(f"关闭 ClientSession 时发生错误: {str(e)}")
+        if self.session is not None and not self.session.closed:
+            try:
+                await self.session.close()
+                logger.info("已关闭 aiohttp ClientSession")
+            except Exception as e:
+                logger.error(f"关闭 ClientSession 时发生错误: {str(e)}")
 
         # 只有当开启了清理临时文件时才执行清理操作
         if self.delete_after_send:
@@ -495,3 +470,7 @@ class MemeGrabberPlugin(Star):
                 logger.error(f"清理临时文件时发生错误: {str(e)}")
         else:
             logger.info("未开启清理临时文件，跳过清理操作")
+
+    async def on_unload(self):
+        """框架卸载插件时的钩子方法"""
+        await self.terminate()
