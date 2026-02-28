@@ -29,7 +29,7 @@
 | temp_dir          | 临时文件保存目录       | data/plugin_data/astrbot_plugin_meme_grabber |
 | delete_after_send | 发送后删除临时文件     | true                                         |
 | default_extension | 默认图片扩展名         | jpg                                          |
-| download_timeout  | 图片下载超时时间（秒） | 10                                           |
+| download_timeout  | 图片下载超时时间（秒） | 60                                           |
 
 # AstrBot 表情包提取插件
 
@@ -87,3 +87,4 @@ AGPL License
 - [astrbot_plugins_ConvetPicture](https://github.com/orchidsziyou/astrbot_plugins_ConvetPicture)
 - [astrbot_plugin_meme_grabber](https://github.com/Yangyuwuhan/astrbot_plugin_meme_grabber)
 - [AstrBot](https://astrbot.app)
+
