@@ -47,12 +47,14 @@ AGPL License
 
 与 [astrbot_plugins_ConvetPicture](https://github.com/orchidsziyou/astrbot_plugins_ConvetPicture) 相比，本插件做了如下改动:
 
-1. 优化代码逻辑
+1. 优化代码逻辑，大幅简化代码
 2. 新增了可能用到的配置文件
 3. 修复了输出的文件名不正确的问题
+4. 修复了插件会阻止LLM功能的问题
 
 ## 相关链接
 
 - [astrbot_plugins_ConvetPicture](https://github.com/orchidsziyou/astrbot_plugins_ConvetPicture)
 - [astrbot_plugin_meme_grabber](https://github.com/Yangyuwuhan/astrbot_plugin_meme_grabber)
 - [AstrBot](https://astrbot.app)
+
