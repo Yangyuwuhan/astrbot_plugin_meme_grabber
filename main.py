@@ -19,7 +19,7 @@ import astrbot.api.message_components as Comp
 
 
 @register(
-    "astrbot_plugin_meme_grabber",
+    "表情包提取",
     "Yangyuwuhan",
     "把QQ表情包提取为可保存的文件",
     "2.0.0",
