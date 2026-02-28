@@ -6,9 +6,10 @@ repo: https://github.com/Yangyuwuhan/astrbot_plugin_meme_grabber
 platforms:
   - aiocqhttp
 commands:
-  - name: 转换
+  - name: 提取
     description: 转换图片为可保存的文件格式
-    usage: 引用表情包或在包含表情包的消息使用 /转换 指令。当消息中存在多个表情包时，支持多个表情包同时转换。
+    usage: 引用表情包或在包含表情包的消息使用 /提取 指令。当消息中存在多个表情包时，支持多个表情包同时转换。
     
+
 
 
