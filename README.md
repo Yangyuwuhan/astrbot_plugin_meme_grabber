@@ -1,0 +1,2 @@
+# astrbot_plugin_meme_grabber
+一个专为AstrBot设计的，可把QQ表情包转换为可保存的图片的插件。
