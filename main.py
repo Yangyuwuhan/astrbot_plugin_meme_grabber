@@ -6,6 +6,7 @@ import datetime
 import shutil
 import asyncio
 import ipaddress
+from pathlib import Path
 
 import aiohttp
 
@@ -34,7 +35,7 @@ class MemeGrabberPlugin(Star):
 
         # 校验 temp_dir 必须在插件数据目录白名单内
         default_data_dir_abs = os.path.abspath(str(default_data_dir))
-        if not self.data_dir.startswith(default_data_dir_abs):
+        if not Path(self.data_dir).is_relative_to(Path(default_data_dir_abs)):
             logger.warning(
                 f"配置的 temp_dir {self.data_dir} 不在默认数据目录 {default_data_dir_abs} 内，使用默认数据目录"
             )
@@ -84,10 +85,11 @@ class MemeGrabberPlugin(Star):
 
             # 防止 SSRF 攻击：解析域名并检查是否为内网地址
             try:
-                import socket
-
                 hostname = parsed_url.netloc.split(":")[0]  # 移除端口号
-                ip_address = socket.gethostbyname(hostname)
+                # 使用异步DNS解析
+                loop = asyncio.get_running_loop()
+                addr_info = await loop.getaddrinfo(hostname, None)
+                ip_address = addr_info[0][4][0]
                 # 检查是否为内网地址
                 try:
                     ip_obj = ipaddress.ip_address(ip_address)
@@ -136,7 +138,7 @@ class MemeGrabberPlugin(Star):
             # 清理可能的临时文件
             if os.path.exists(relative_path):
                 os.remove(relative_path)
-                logger.info(f"已清理失败的临时文件: {relative_path}")
+                logger.info(f"已删除: {os.path.basename(relative_path)}")
             return False
 
     async def send_file_to_user(
@@ -170,7 +172,7 @@ class MemeGrabberPlugin(Star):
                 try:
                     if os.path.exists(file_path):
                         os.remove(file_path)
-                        logger.info(f"删除临时文件: {file_path}")
+                        logger.info(f"已删除: {os.path.basename(file_path)}")
                 except Exception as e:
                     logger.error(f"删除临时文件时发生错误: {str(e)}")
             event.stop_event()
@@ -221,7 +223,7 @@ class MemeGrabberPlugin(Star):
             try:
                 shutil.copy2(localdiskpath, temp_path)
                 abs_path = os.path.abspath(temp_path)
-                logger.info(f"图片已复制到临时目录: {abs_path}")
+                logger.info(f"已获取: {filename}")
                 # 发送插件创建的文件，允许删除
                 async for result in self.send_file_to_user(
                     event, abs_path, filename, is_plugin_created=True
@@ -254,36 +256,28 @@ class MemeGrabberPlugin(Star):
         try:
             # 提取图片信息
             picture_url = img_msg.get("data", {}).get("url")
-            if not picture_url:
-                logger.error("图片消息中缺少URL")
-                return None, None, False
+            file_id = img_msg.get("data", {}).get("file")
 
-            logger.info(f"处理图片: {picture_url}")
+            # 处理官方表情（有URL）
+            if picture_url and "/club/item/" in picture_url:
+                logger.info(f"处理图片: {picture_url}")
+                # 提取图片URL的扩展名，保持原格式
+                parsed_url = urllib.parse.urlparse(picture_url)
+                path = parsed_url.path
+                ext = os.path.splitext(path)[1].lower()
+                if not ext:
+                    ext = f".{self.default_extension}"  # 默认格式
 
-            # 提取图片URL的扩展名，保持原格式
-            parsed_url = urllib.parse.urlparse(picture_url)
-            path = parsed_url.path
-            ext = os.path.splitext(path)[1].lower()
-            if not ext:
-                ext = f".{self.default_extension}"  # 默认格式
+                # 生成唯一的文件名和保存路径
+                filename = self._generate_filename(ext)
+                relative_path = os.path.join(self.data_dir, filename)
 
-            # 生成唯一的文件名和保存路径
-            filename = self._generate_filename(ext)
-            relative_path = os.path.join(self.data_dir, filename)
-
-            # 处理官方表情
-            if "/club/item/" in picture_url:
                 result = await self.download_image(picture_url, relative_path)
                 if result:
                     absolute_path = os.path.abspath(relative_path)
                     return absolute_path, filename, True
-            # 处理普通图片
-            elif (
-                isinstance(img_msg, dict)
-                and "data" in img_msg
-                and "file" in img_msg["data"]
-            ):
-                file_id = img_msg["data"]["file"]
+            # 处理普通图片（有file_id）
+            elif file_id:
                 img_response = await event.bot.api.call_action(
                     "get_image", file_id=file_id
                 )
@@ -309,13 +303,16 @@ class MemeGrabberPlugin(Star):
                 try:
                     shutil.copy2(localdiskpath, temp_path)
                     abs_path = os.path.abspath(temp_path)
-                    logger.info(f"图片已复制到临时目录: {abs_path}")
+                    logger.info(f"已获取: {filename}")
                     return abs_path, filename, True
                 except Exception as e:
                     logger.exception(f"复制图片到临时目录失败: {str(e)}")
                     # 如果复制失败，使用原始路径
                     abs_path = os.path.abspath(localdiskpath)
                     return abs_path, filename, False
+            else:
+                logger.error("图片消息中缺少URL或file_id")
+                return None, None, False
         except Exception as e:
             logger.exception(f"处理图片时发生错误: {str(e)}")
         return None, None, False
@@ -389,7 +386,9 @@ class MemeGrabberPlugin(Star):
                             try:
                                 if os.path.exists(file_path):
                                     os.remove(file_path)
-                                    logger.info(f"删除临时文件: {file_path}")
+                                    logger.info(
+                                        f"已删除: {os.path.basename(file_path)}"
+                                    )
                             except Exception as e:
                                 logger.exception(f"删除临时文件时发生错误: {str(e)}")
 
@@ -447,49 +446,9 @@ class MemeGrabberPlugin(Star):
             # 并发处理图片
             tasks = []
             for img_msg in found_images:
-
-                async def process_single_image(img):
-                    picture_id = img.file
-                    try:
-                        # 调用 QQ 协议获取图片
-                        response = await client.api.call_action(
-                            "get_image", file_id=picture_id
-                        )
-                        localdiskpath = response.get("file")
-                        if not localdiskpath:
-                            logger.error("获取图片文件路径失败")
-                            return None, None, False
-
-                        # 只通过filetype库判断文件格式
-                        file_extension = f".{self.default_extension}"  # 默认扩展名
-                        try:
-                            kind = filetype.guess(localdiskpath)
-                            if kind and kind.extension:
-                                file_extension = f".{kind.extension}"
-                        except Exception as e:
-                            logger.exception(f"使用filetype判断图片类型失败: {str(e)}")
-
-                        # 生成唯一的文件名
-                        filename = self._generate_filename(file_extension)
-
-                        # 复制图片到我们的临时目录
-                        temp_path = os.path.join(self.data_dir, filename)
-
-                        try:
-                            shutil.copy2(localdiskpath, temp_path)
-                            abs_path = os.path.abspath(temp_path)
-                            logger.info(f"图片已复制到临时目录: {abs_path}")
-                            return abs_path, filename, True
-                        except Exception as e:
-                            logger.exception(f"复制图片到临时目录失败: {str(e)}")
-                            # 如果复制失败，使用原始路径
-                            abs_path = os.path.abspath(localdiskpath)
-                            return abs_path, filename, False
-                    except Exception as e:
-                        logger.exception(f"处理图片时发生错误: {str(e)}")
-                        return None, None, False
-
-                tasks.append(process_single_image(img_msg))
+                # 构建与_process_image_to_file兼容的消息字典
+                img_dict = {"type": "image", "data": {"file": img_msg.file, "url": ""}}
+                tasks.append(self._process_image_to_file(event, img_dict))
 
             results = await asyncio.gather(*tasks)
 
@@ -512,7 +471,7 @@ class MemeGrabberPlugin(Star):
                         try:
                             if os.path.exists(file_path):
                                 os.remove(file_path)
-                                logger.info(f"删除临时文件: {file_path}")
+                                logger.info(f"已删除: {os.path.basename(file_path)}")
                         except Exception as e:
                             logger.exception(f"删除临时文件时发生错误: {str(e)}")
 
@@ -544,7 +503,7 @@ class MemeGrabberPlugin(Star):
                             file_path = os.path.join(self.data_dir, file)
                             if os.path.isfile(file_path):
                                 os.remove(file_path)
-                                logger.info(f"清理临时文件: {file_path}")
+                                logger.info(f"已删除: {os.path.basename(file_path)}")
             except Exception as e:
                 logger.exception(f"清理临时文件时发生错误: {str(e)}")
         else:
