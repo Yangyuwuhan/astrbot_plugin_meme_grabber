@@ -1,26 +1,24 @@
-import os
-import urllib.parse
-import time
-import uuid
-import datetime
-import shutil
 import asyncio
+import datetime
 import ipaddress
+import os
+import shutil
+import time
+import urllib.parse
+import uuid
 from pathlib import Path
 
 import aiohttp
-
 import filetype
 
-from astrbot.api import logger
-from astrbot.api import AstrBotConfig
-from astrbot.api.event import filter, AstrMessageEvent
+import astrbot.api.message_components as Comp
+from astrbot.api import AstrBotConfig, logger
+from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
-from astrbot.core.message.components import Image, BaseMessageComponent, Reply
+from astrbot.core.message.components import BaseMessageComponent, Image, Reply
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
 )
-import astrbot.api.message_components as Comp
 
 
 class MemeGrabberPlugin(Star):
@@ -56,7 +54,8 @@ class MemeGrabberPlugin(Star):
         self.download_semaphore = asyncio.Semaphore(5)
 
     async def _get_session(self):
-        """获取或创建 aiohttp ClientSession
+        """
+        获取或创建 aiohttp ClientSession
 
         Returns:
             aiohttp.ClientSession: 异步HTTP会话
@@ -67,7 +66,8 @@ class MemeGrabberPlugin(Star):
         return self.session
 
     async def download_image(self, picture_url: str, relative_path: str) -> bool:
-        """下载图片到本地
+        """
+        下载图片到本地
 
         Args:
             picture_url: 图片URL
@@ -148,7 +148,8 @@ class MemeGrabberPlugin(Star):
         filename: str,
         is_plugin_created: bool = True,
     ):
-        """发送文件给用户
+        """
+        发送文件给用户
 
         Args:
             event: 消息事件
@@ -178,7 +179,8 @@ class MemeGrabberPlugin(Star):
             event.stop_event()
 
     def _generate_filename(self, ext: str) -> str:
-        """生成唯一的文件名
+        """
+        生成唯一的文件名
 
         Args:
             ext: 文件扩展名，包含点号
@@ -192,7 +194,8 @@ class MemeGrabberPlugin(Star):
         return f"meme_{date_str}_{timestamp}_{unique_id}{ext}"
 
     async def _process_local_image(self, event: AstrMessageEvent, localdiskpath: str):
-        """处理本地图片路径，转换为可发送文件
+        """
+        处理本地图片路径，转换为可发送文件
 
         Args:
             event: 消息事件
@@ -244,8 +247,8 @@ class MemeGrabberPlugin(Star):
             event.should_call_llm(False)
 
     async def _process_image_to_file(self, event: AiocqhttpMessageEvent, img_msg: dict):
-        """处理图片消息并转换为可发送的文件
-
+        """
+        处理图片消息并转换为可发送的文件
         Args:
             event: 消息事件
             img_msg: 图片消息字典
@@ -318,7 +321,8 @@ class MemeGrabberPlugin(Star):
         return None, None, False
 
     async def handle_reply_message(self, event: AstrMessageEvent, reply_msg: Reply):
-        """处理回复消息
+        """
+        处理回复消息
 
         Args:
             event: 消息事件
@@ -401,7 +405,8 @@ class MemeGrabberPlugin(Star):
 
     @filter.command("提取")
     async def convert_command(self, event: AstrMessageEvent):
-        """提取图片为可保存的文件格式
+        """
+        提取图片为可保存的文件格式
 
         用法: 发送图片或回复包含图片的消息，然后输入 /提取 指令
         """
@@ -440,8 +445,6 @@ class MemeGrabberPlugin(Star):
                 event.stop_event()
                 event.should_call_llm(False)
                 return
-
-            client = event.bot
 
             # 并发处理图片
             tasks = []
