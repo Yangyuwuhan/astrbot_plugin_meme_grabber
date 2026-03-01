@@ -46,11 +46,14 @@
 2. 本插件使用了AI，但作者已对其进行了严格的审查和测试
 3. 本插件使用 AGPL License
 
+
+## 提出问题
+
+1. 直接提交 issue
+2. 添加 QQ群: 1083269367 进行反馈，注意入群后及时完成人机验证
+
 ## 相关链接
 
 - [astrbot_plugins_ConvetPicture](https://github.com/orchidsziyou/astrbot_plugins_ConvetPicture)
 - [astrbot_plugin_meme_grabber](https://github.com/Yangyuwuhan/astrbot_plugin_meme_grabber)
 - [AstrBot](https://astrbot.app)
-
-
-
